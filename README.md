@@ -10,5 +10,6 @@ A lean and mean Windows optimization utility written in C# using Native AOT, all
 * Comprehensive Tweaks, including:
     * Disable Telemetry & Automatic Maintenance.
     * Control Windows Updates.
-    * Explorer fixes: Show file extensions, hidden files, and This PC.
+    * Explorer fixes: Show file extensions, hidden files, This PC, and classic right-click context menu.
     * System tweaks: Disable Fast Startup and make all Wi-Fi connections metered.
+    * Start Menu: Disable Bing search.
