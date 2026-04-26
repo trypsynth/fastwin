@@ -111,6 +111,8 @@ while (true) {
 			Console.WriteLine("[!] Invalid selection.");
 			break;
 	}
+	Console.Write("Press enter to continue...");
+	Console.ReadLine();
 }
 
 static bool IsAutoMaintenanceDisabled() =>
