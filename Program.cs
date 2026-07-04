@@ -17,6 +17,8 @@ while (true) {
 	Console.WriteLine($"11. Make Explorer open to 'This PC' ({S(IsExplorerThisPC())}).");
 	Console.WriteLine($"12. Restore Classic Right-Click Context Menu (Win 11) ({S(IsClassicContextMenu())}).");
 	Console.WriteLine($"13. Disable Bing Search in Start Menu ({S(IsBingSearchDisabled())}).");
+	Console.WriteLine($"14. Disable ' - Shortcut' Suffix on New Shortcuts ({S(IsShortcutSuffixDisabled())}).");
+	Console.WriteLine($"15. Enable Checkbox Selection in File Explorer ({S(IsCheckboxSelectionEnabled())}).");
 	Console.WriteLine("0. Exit.");
 	Console.Write("\nSelect an option: ");
 	string? input = Console.ReadLine();
@@ -107,6 +109,20 @@ while (true) {
 				);
 			}
 			break;
+		case "14":
+			if (IsShortcutSuffixDisabled())
+				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "link", new byte[] { 0x1e, 0x00, 0x00, 0x00 }, RegistryValueKind.Binary));
+			else
+				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "link", new byte[] { 0x00, 0x00, 0x00, 0x00 }, RegistryValueKind.Binary));
+			Console.WriteLine("Restart Explorer for the change to take effect.");
+			break;
+		case "15":
+			if (IsCheckboxSelectionEnabled())
+				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "AutoCheckSelect", 0));
+			else
+				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "AutoCheckSelect", 1));
+			Console.WriteLine("Restart Explorer for the change to take effect.");
+			break;
 		default:
 			Console.WriteLine("[!] Invalid selection.");
 			break;
@@ -151,6 +167,14 @@ static bool IsClassicContextMenu() =>
 static bool IsBingSearchDisabled() =>
 	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled") == 0;
 
+static bool IsShortcutSuffixDisabled() {
+	byte[]? link = GetRegBinary(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "link");
+	return link != null && Array.TrueForAll(link, b => b == 0);
+}
+
+static bool IsCheckboxSelectionEnabled() =>
+	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "AutoCheckSelect") == 1;
+
 static string S(bool active) => active ? "ON" : "OFF";
 
 static object? GetReg(RegistryKey hive, string path, string name) {
@@ -167,6 +191,9 @@ static int GetRegDWord(RegistryKey hive, string path, string name) =>
 
 static string? GetRegString(RegistryKey hive, string path, string name) =>
 	GetReg(hive, path, name) as string;
+
+static byte[]? GetRegBinary(RegistryKey hive, string path, string name) =>
+	GetReg(hive, path, name) as byte[];
 
 static bool RegKeyExists(RegistryKey hive, string path) {
 	try {
