@@ -1,279 +1,243 @@
 using Microsoft.Win32;
 using System.Diagnostics;
 
+Category[] categories = [
+	new("Privacy and Ads", [
+		Toggle("Disable Telemetry (Enterprise/Education only)", IsTelemetryDisabled,
+			() => { Report(SetReg(Registry.LocalMachine, DataCollectionPolicy, "AllowTelemetry", 0)); RunGpUpdate(); },
+			() => { Report(DeleteRegValue(Registry.LocalMachine, DataCollectionPolicy, "AllowTelemetry")); RunGpUpdate(); }),
+		Toggle("Disable Advertising ID", IsAdvertisingIdDisabled,
+			() => Report(SetReg(Registry.CurrentUser, AdvertisingInfoKey, "Enabled", 0)),
+			() => Report(SetReg(Registry.CurrentUser, AdvertisingInfoKey, "Enabled", 1))),
+		Toggle("Disable Suggested Apps, Tips and Ads", IsSuggestionsDisabled,
+			() => Report(Array.ConvertAll(SuggestionValues, name => SetReg(Registry.CurrentUser, ContentDeliveryManagerKey, name, 0))),
+			() => Report(Array.ConvertAll(SuggestionValues, name => SetReg(Registry.CurrentUser, ContentDeliveryManagerKey, name, 1)))),
+		Toggle("Disable 'Finish Setting Up Your Device' Prompt", IsSetupNagDisabled,
+			() => Report(SetReg(Registry.CurrentUser, UserProfileEngagementKey, "ScoobeSystemSettingEnabled", 0)),
+			() => Report(SetReg(Registry.CurrentUser, UserProfileEngagementKey, "ScoobeSystemSettingEnabled", 1))),
+		Toggle("Disable Bing Search in Start Menu", IsBingSearchDisabled,
+			() => {
+				Report(
+					SetReg(Registry.CurrentUser, SearchKey, "BingSearchEnabled", 0),
+					SetReg(Registry.CurrentUser, SearchKey, "CortanaConsent", 0),
+					SetReg(Registry.CurrentUser, ExplorerPolicy, "DisableSearchBoxSuggestions", 1)
+				);
+				RestartExplorerNote();
+			},
+			() => {
+				Report(
+					SetReg(Registry.CurrentUser, SearchKey, "BingSearchEnabled", 1),
+					SetReg(Registry.CurrentUser, SearchKey, "CortanaConsent", 1),
+					DeleteRegValue(Registry.CurrentUser, ExplorerPolicy, "DisableSearchBoxSuggestions")
+				);
+				RestartExplorerNote();
+			}),
+	]),
+	new("Windows Update", [
+		new("Disable Updates Completely", () => {
+			Report(SetReg(Registry.LocalMachine, WindowsUpdatePolicy, "NoAutoUpdate", 1));
+			RunGpUpdate();
+		}),
+		new("Notify Only", () => {
+			Report(
+				SetReg(Registry.LocalMachine, WindowsUpdatePolicy, "NoAutoUpdate", 0),
+				SetReg(Registry.LocalMachine, WindowsUpdatePolicy, "AUOptions", 2)
+			);
+			RunGpUpdate();
+		}),
+		Toggle("Disable Driver Retrieval from Windows Update", IsDriverRetrievalDisabled,
+			() => Report(SetReg(Registry.LocalMachine, DriverSearchingKey, "SearchOrderConfig", 0)),
+			() => Report(SetReg(Registry.LocalMachine, DriverSearchingKey, "SearchOrderConfig", 1))),
+		Toggle("Disable Sharing Updates with Other PCs", IsPeerUpdateSharingDisabled,
+			() => { Report(SetReg(Registry.LocalMachine, DeliveryOptimizationPolicy, "DODownloadMode", 0)); RunGpUpdate(); },
+			() => { Report(DeleteRegValue(Registry.LocalMachine, DeliveryOptimizationPolicy, "DODownloadMode")); RunGpUpdate(); }),
+		Toggle("Don't Auto-Restart While Signed In", IsAutoRebootDisabled,
+			() => { Report(SetReg(Registry.LocalMachine, WindowsUpdatePolicy, "NoAutoRebootWithLoggedOnUsers", 1)); RunGpUpdate(); },
+			() => { Report(DeleteRegValue(Registry.LocalMachine, WindowsUpdatePolicy, "NoAutoRebootWithLoggedOnUsers")); RunGpUpdate(); }),
+	]),
+	new("File Explorer", [
+		Toggle("Show File Extensions", IsShowFileExtensions,
+			() => Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "HideFileExt", 0)),
+			() => Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "HideFileExt", 1))),
+		Toggle("Show Hidden Files", IsShowHiddenFiles,
+			() => Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "Hidden", 1)),
+			() => Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "Hidden", 2))),
+		Toggle("Don't Hide Empty Drives", IsShowEmptyDrives,
+			() => Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "HideDrivesWithNoMedia", 0)),
+			() => Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "HideDrivesWithNoMedia", 1))),
+		Toggle("Open to 'This PC'", IsExplorerThisPC,
+			() => Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "LaunchTo", 1)),
+			() => Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "LaunchTo", 2))),
+		Toggle("Restore Classic Right-Click Context Menu (Win 11)", IsClassicContextMenu,
+			() => { Report(SetReg(Registry.CurrentUser, ClassicContextMenuKey + @"\InprocServer32", "", "", RegistryValueKind.String)); RestartExplorerNote(); },
+			() => { Report(DeleteRegKey(Registry.CurrentUser, ClassicContextMenuKey)); RestartExplorerNote(); }),
+		Toggle("Enable Checkbox Selection", IsCheckboxSelectionEnabled,
+			() => { Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "AutoCheckSelect", 1)); RestartExplorerNote(); },
+			() => { Report(SetReg(Registry.CurrentUser, ExplorerAdvancedKey, "AutoCheckSelect", 0)); RestartExplorerNote(); }),
+		Toggle("Disable ' - Shortcut' Suffix on New Shortcuts", IsShortcutSuffixDisabled,
+			() => { Report(SetReg(Registry.CurrentUser, ExplorerKey, "link", new byte[] { 0x00, 0x00, 0x00, 0x00 }, RegistryValueKind.Binary)); RestartExplorerNote(); },
+			() => { Report(SetReg(Registry.CurrentUser, ExplorerKey, "link", new byte[] { 0x1e, 0x00, 0x00, 0x00 }, RegistryValueKind.Binary)); RestartExplorerNote(); }),
+		Toggle("Hide Recent Files and Frequent Folders", IsRecentItemsHidden,
+			() => {
+				Report(SetReg(Registry.CurrentUser, ExplorerKey, "ShowRecent", 0), SetReg(Registry.CurrentUser, ExplorerKey, "ShowFrequent", 0));
+				RestartExplorerNote();
+			},
+			() => {
+				Report(SetReg(Registry.CurrentUser, ExplorerKey, "ShowRecent", 1), SetReg(Registry.CurrentUser, ExplorerKey, "ShowFrequent", 1));
+				RestartExplorerNote();
+			}),
+		Toggle("Disable Folder Discovery", IsFolderDiscoveryDisabled,
+			() => Report(SetReg(Registry.CurrentUser, AllFoldersShellKey, "FolderType", "NotSpecified", RegistryValueKind.String)),
+			() => Report(DeleteRegValue(Registry.CurrentUser, AllFoldersShellKey, "FolderType"))),
+	]),
+	new("System", [
+		Toggle("Disable Automatic Maintenance", IsAutoMaintenanceDisabled,
+			() => Report(SetReg(Registry.LocalMachine, MaintenanceKey, "MaintenanceDisabled", 1)),
+			() => Report(SetReg(Registry.LocalMachine, MaintenanceKey, "MaintenanceDisabled", 0))),
+		Toggle("Disable Fast Startup", IsFastStartupDisabled,
+			() => Report(SetReg(Registry.LocalMachine, PowerKey, "HiberbootEnabled", 0)),
+			() => Report(SetReg(Registry.LocalMachine, PowerKey, "HiberbootEnabled", 1))),
+		Toggle("Make All Wi-Fi Connections Metered", IsWifiMetered,
+			() => Report(SetReg(Registry.LocalMachine, NetCostPolicy, "cost", 3)),
+			() => Report(DeleteRegValue(Registry.LocalMachine, NetCostPolicy, "cost"))),
+		Toggle("Disable Search Indexer", IsSearchIndexerDisabled,
+			() => { Report(SetReg(Registry.LocalMachine, WSearchServiceKey, "Start", 4)); RunHidden("sc", "stop WSearch"); },
+			() => { Report(SetReg(Registry.LocalMachine, WSearchServiceKey, "Start", 2)); RunHidden("sc", "start WSearch"); }),
+		Toggle("Enable Long Paths (over 260 characters)", IsLongPathsEnabled,
+			() => Report(SetReg(Registry.LocalMachine, FileSystemKey, "LongPathsEnabled", 1)),
+			() => Report(SetReg(Registry.LocalMachine, FileSystemKey, "LongPathsEnabled", 0))),
+	]),
+	new("Apps", [
+		Toggle("Disable OneDrive", IsOneDriveDisabled,
+			() => { Report(SetReg(Registry.LocalMachine, OneDrivePolicy, "DisableFileSyncNGSC", 1)); RunGpUpdate(); SignOutNote(); },
+			() => { Report(DeleteRegValue(Registry.LocalMachine, OneDrivePolicy, "DisableFileSyncNGSC")); RunGpUpdate(); SignOutNote(); }),
+		Toggle("Stop Edge Running in the Background", IsEdgeBackgroundDisabled,
+			() => Report(SetReg(Registry.LocalMachine, EdgePolicy, "StartupBoostEnabled", 0), SetReg(Registry.LocalMachine, EdgePolicy, "BackgroundModeEnabled", 0)),
+			() => Report(DeleteRegValue(Registry.LocalMachine, EdgePolicy, "StartupBoostEnabled"), DeleteRegValue(Registry.LocalMachine, EdgePolicy, "BackgroundModeEnabled"))),
+	]),
+];
+
 while (true) {
 	Console.Clear();
 	Console.WriteLine("Fastwin - Main Menu.");
-	Console.WriteLine($"1. Disable Automatic Maintenance ({S(IsAutoMaintenanceDisabled())}).");
-	Console.WriteLine($"2. Disable Telemetry (Enterprise/Education only) ({S(IsTelemetryDisabled())}).");
-	Console.WriteLine("3. Windows Update Configuration.");
-	Console.WriteLine($"4. Disable Driver Retrieval from Windows Update ({S(IsDriverRetrievalDisabled())}).");
-	Console.WriteLine($"5. Make All Wi-Fi connections Metered ({S(IsWifiMetered())}).");
-	Console.WriteLine($"6. Disable Fast Startup ({S(IsFastStartupDisabled())}).");
-	Console.WriteLine($"7. Disable Folder Discovery ({S(IsFolderDiscoveryDisabled())}).");
-	Console.WriteLine($"8. Make Explorer Show File Extensions ({S(IsShowFileExtensions())}).");
-	Console.WriteLine($"9. Make Explorer Show Hidden Files ({S(IsShowHiddenFiles())}).");
-	Console.WriteLine($"10. Make Explorer not Hide Empty Drives ({S(IsShowEmptyDrives())}).");
-	Console.WriteLine($"11. Make Explorer open to 'This PC' ({S(IsExplorerThisPC())}).");
-	Console.WriteLine($"12. Restore Classic Right-Click Context Menu (Win 11) ({S(IsClassicContextMenu())}).");
-	Console.WriteLine($"13. Disable Bing Search in Start Menu ({S(IsBingSearchDisabled())}).");
-	Console.WriteLine($"14. Disable ' - Shortcut' Suffix on New Shortcuts ({S(IsShortcutSuffixDisabled())}).");
-	Console.WriteLine($"15. Enable Checkbox Selection in File Explorer ({S(IsCheckboxSelectionEnabled())}).");
-	Console.WriteLine($"16. Disable OneDrive ({S(IsOneDriveDisabled())}).");
-	Console.WriteLine($"17. Disable Suggested Apps, Tips and Ads ({S(IsSuggestionsDisabled())}).");
-	Console.WriteLine($"18. Disable Search Indexer ({S(IsSearchIndexerDisabled())}).");
-	Console.WriteLine($"19. Stop Edge Running in the Background ({S(IsEdgeBackgroundDisabled())}).");
-	Console.WriteLine($"20. Disable Advertising ID ({S(IsAdvertisingIdDisabled())}).");
-	Console.WriteLine($"21. Disable 'Finish Setting Up Your Device' Prompt ({S(IsSetupNagDisabled())}).");
-	Console.WriteLine($"22. Enable Long Paths (over 260 characters) ({S(IsLongPathsEnabled())}).");
-	Console.WriteLine($"23. Hide Recent Files and Frequent Folders in Explorer ({S(IsRecentItemsHidden())}).");
+	for (int i = 0; i < categories.Length; i++)
+		Console.WriteLine($"{i + 1}. {categories[i].Name}.");
 	Console.WriteLine("0. Exit.");
 	Console.Write("\nSelect an option: ");
 	string? input = Console.ReadLine();
 	if (input == "0") break;
-	Console.Clear();
-	switch (input) {
-		case "1":
-			if (IsAutoMaintenanceDisabled())
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance", "MaintenanceDisabled", 0));
-			else
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance", "MaintenanceDisabled", 1));
-			break;
-		case "2":
-			if (IsTelemetryDisabled())
-				Report(DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry"));
-			else
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0));
-			RunGpUpdate();
-			break;
-		case "3":
-			ConfigureUpdates();
-			break;
-		case "4":
-			if (IsDriverRetrievalDisabled())
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching", "SearchOrderConfig", 1));
-			else
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching", "SearchOrderConfig", 0));
-			break;
-		case "5":
-			if (IsWifiMetered())
-				Report(DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\Wireless\NetCost", "cost"));
-			else
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\Wireless\NetCost", "cost", 3));
-			break;
-		case "6":
-			if (IsFastStartupDisabled())
-				Report(SetReg(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\Power", "HiberbootEnabled", 1));
-			else
-				Report(SetReg(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\Power", "HiberbootEnabled", 0));
-			break;
-		case "7":
-			if (IsFolderDiscoveryDisabled())
-				Report(DeleteRegValue(Registry.CurrentUser, @"Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell", "FolderType"));
-			else
-				Report(SetReg(Registry.CurrentUser, @"Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell", "FolderType", "NotSpecified", RegistryValueKind.String));
-			break;
-		case "8":
-			if (IsShowFileExtensions())
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideFileExt", 1));
-			else
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideFileExt", 0));
-			break;
-		case "9":
-			if (IsShowHiddenFiles())
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "Hidden", 2));
-			else
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "Hidden", 1));
-			break;
-		case "10":
-			if (IsShowEmptyDrives())
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideDrivesWithNoMedia", 1));
-			else
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideDrivesWithNoMedia", 0));
-			break;
-		case "11":
-			if (IsExplorerThisPC())
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "LaunchTo", 2));
-			else
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "LaunchTo", 1));
-			break;
-		case "12":
-			if (IsClassicContextMenu())
-				Report(DeleteRegKey(Registry.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"));
-			else
-				Report(SetReg(Registry.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32", "", "", RegistryValueKind.String));
-			Console.WriteLine("Restart Explorer for the change to take effect.");
-			break;
-		case "13":
-			if (IsBingSearchDisabled()) {
-				Report(
-					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled", 1),
-					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "CortanaConsent", 1),
-					DeleteRegValue(Registry.CurrentUser, @"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions")
-				);
-			} else {
-				Report(
-					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled", 0),
-					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "CortanaConsent", 0),
-					SetReg(Registry.CurrentUser, @"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions", 1)
-				);
-			}
-			Console.WriteLine("Restart Explorer for the change to take effect.");
-			break;
-		case "14":
-			if (IsShortcutSuffixDisabled())
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "link", new byte[] { 0x1e, 0x00, 0x00, 0x00 }, RegistryValueKind.Binary));
-			else
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "link", new byte[] { 0x00, 0x00, 0x00, 0x00 }, RegistryValueKind.Binary));
-			Console.WriteLine("Restart Explorer for the change to take effect.");
-			break;
-		case "15":
-			if (IsCheckboxSelectionEnabled())
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "AutoCheckSelect", 0));
-			else
-				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "AutoCheckSelect", 1));
-			Console.WriteLine("Restart Explorer for the change to take effect.");
-			break;
-		case "16":
-			if (IsOneDriveDisabled())
-				Report(DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\OneDrive", "DisableFileSyncNGSC"));
-			else
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\OneDrive", "DisableFileSyncNGSC", 1));
-			RunGpUpdate();
-			Console.WriteLine("Sign out and back in for the change to take full effect.");
-			break;
-		case "17": {
-			int value = IsSuggestionsDisabled() ? 1 : 0;
-			Report(Array.ConvertAll(SuggestionValues, name =>
-				SetReg(Registry.CurrentUser, ContentDeliveryManagerPath, name, value)));
-			break;
-		}
-		case "18":
-			if (IsSearchIndexerDisabled()) {
-				Report(SetReg(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\WSearch", "Start", 2));
-				RunHidden("sc", "start WSearch");
-			} else {
-				Report(SetReg(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\WSearch", "Start", 4));
-				RunHidden("sc", "stop WSearch");
-			}
-			break;
-		case "19":
-			if (IsEdgeBackgroundDisabled()) {
-				Report(
-					DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "StartupBoostEnabled"),
-					DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "BackgroundModeEnabled")
-				);
-			} else {
-				Report(
-					SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "StartupBoostEnabled", 0),
-					SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "BackgroundModeEnabled", 0)
-				);
-			}
-			break;
-		case "20":
-			Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled", IsAdvertisingIdDisabled() ? 1 : 0));
-			break;
-		case "21":
-			Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement", "ScoobeSystemSettingEnabled", IsSetupNagDisabled() ? 1 : 0));
-			break;
-		case "22":
-			Report(SetReg(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "LongPathsEnabled", IsLongPathsEnabled() ? 0 : 1));
-			break;
-		case "23": {
-			int value = IsRecentItemsHidden() ? 1 : 0;
-			Report(
-				SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "ShowRecent", value),
-				SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "ShowFrequent", value)
-			);
-			Console.WriteLine("Restart Explorer for the change to take effect.");
-			break;
-		}
-		default:
-			Console.WriteLine("[!] Invalid selection.");
-			break;
-	}
-	Console.Write("Press enter to continue...");
-	Console.ReadLine();
+	if (int.TryParse(input, out int n) && n >= 1 && n <= categories.Length)
+		ShowCategory(categories[n - 1]);
 }
 
+static void ShowCategory(Category category) {
+	while (true) {
+		Console.Clear();
+		Console.WriteLine($"Fastwin - {category.Name}.");
+		for (int i = 0; i < category.Items.Length; i++) {
+			MenuItem item = category.Items[i];
+			string state = item.State == null ? "" : $" ({S(item.State())})";
+			Console.WriteLine($"{i + 1}. {item.Label}{state}.");
+		}
+		Console.WriteLine("0. Back.");
+		Console.Write("\nSelect an option: ");
+		string? input = Console.ReadLine();
+		if (input == "0") return;
+		Console.Clear();
+		if (int.TryParse(input, out int n) && n >= 1 && n <= category.Items.Length)
+			category.Items[n - 1].Run();
+		else
+			Console.WriteLine("[!] Invalid selection.");
+		Console.Write("Press enter to continue...");
+		Console.ReadLine();
+	}
+}
+
+static MenuItem Toggle(string label, Func<bool> isOn, Action turnOn, Action turnOff) =>
+	new(label, () => { if (isOn()) turnOff(); else turnOn(); }, isOn);
+
 static bool IsAutoMaintenanceDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance", "MaintenanceDisabled") == 1;
+	GetRegDWord(Registry.LocalMachine, MaintenanceKey, "MaintenanceDisabled") == 1;
 
 static bool IsTelemetryDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry") == 0;
+	GetRegDWord(Registry.LocalMachine, DataCollectionPolicy, "AllowTelemetry") == 0;
 
 static bool IsDriverRetrievalDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching", "SearchOrderConfig") == 0;
+	GetRegDWord(Registry.LocalMachine, DriverSearchingKey, "SearchOrderConfig") == 0;
 
 static bool IsWifiMetered() =>
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\Wireless\NetCost", "cost") == 3;
+	GetRegDWord(Registry.LocalMachine, NetCostPolicy, "cost") == 3;
 
 static bool IsFastStartupDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\Power", "HiberbootEnabled") == 0;
+	GetRegDWord(Registry.LocalMachine, PowerKey, "HiberbootEnabled") == 0;
 
 static bool IsFolderDiscoveryDisabled() =>
-	GetRegString(Registry.CurrentUser, @"Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell", "FolderType") == "NotSpecified";
+	GetRegString(Registry.CurrentUser, AllFoldersShellKey, "FolderType") == "NotSpecified";
 
 static bool IsShowFileExtensions() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideFileExt") == 0;
+	GetRegDWord(Registry.CurrentUser, ExplorerAdvancedKey, "HideFileExt") == 0;
 
 static bool IsShowHiddenFiles() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "Hidden") == 1;
+	GetRegDWord(Registry.CurrentUser, ExplorerAdvancedKey, "Hidden") == 1;
 
 static bool IsShowEmptyDrives() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideDrivesWithNoMedia") == 0;
+	GetRegDWord(Registry.CurrentUser, ExplorerAdvancedKey, "HideDrivesWithNoMedia") == 0;
 
 static bool IsExplorerThisPC() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "LaunchTo") == 1;
+	GetRegDWord(Registry.CurrentUser, ExplorerAdvancedKey, "LaunchTo") == 1;
 
 static bool IsClassicContextMenu() =>
-	RegKeyExists(Registry.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32");
+	RegKeyExists(Registry.CurrentUser, ClassicContextMenuKey + @"\InprocServer32");
 
 static bool IsBingSearchDisabled() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled") == 0 &&
-	GetRegDWord(Registry.CurrentUser, @"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions") == 1;
+	GetRegDWord(Registry.CurrentUser, SearchKey, "BingSearchEnabled") == 0 &&
+	GetRegDWord(Registry.CurrentUser, ExplorerPolicy, "DisableSearchBoxSuggestions") == 1;
 
 static bool IsShortcutSuffixDisabled() {
-	byte[]? link = GetRegBinary(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "link");
+	byte[]? link = GetRegBinary(Registry.CurrentUser, ExplorerKey, "link");
 	return link != null && Array.TrueForAll(link, b => b == 0);
 }
 
 static bool IsCheckboxSelectionEnabled() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "AutoCheckSelect") == 1;
+	GetRegDWord(Registry.CurrentUser, ExplorerAdvancedKey, "AutoCheckSelect") == 1;
 
 static bool IsOneDriveDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\OneDrive", "DisableFileSyncNGSC") == 1;
+	GetRegDWord(Registry.LocalMachine, OneDrivePolicy, "DisableFileSyncNGSC") == 1;
 
 static bool IsSuggestionsDisabled() =>
-	Array.TrueForAll(SuggestionValues, name => GetRegDWord(Registry.CurrentUser, ContentDeliveryManagerPath, name) == 0);
+	Array.TrueForAll(SuggestionValues, name => GetRegDWord(Registry.CurrentUser, ContentDeliveryManagerKey, name) == 0);
 
 static bool IsSearchIndexerDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\WSearch", "Start") == 4;
+	GetRegDWord(Registry.LocalMachine, WSearchServiceKey, "Start") == 4;
 
 static bool IsEdgeBackgroundDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "StartupBoostEnabled") == 0 &&
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "BackgroundModeEnabled") == 0;
+	GetRegDWord(Registry.LocalMachine, EdgePolicy, "StartupBoostEnabled") == 0 &&
+	GetRegDWord(Registry.LocalMachine, EdgePolicy, "BackgroundModeEnabled") == 0;
 
 static bool IsAdvertisingIdDisabled() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled") == 0;
+	GetRegDWord(Registry.CurrentUser, AdvertisingInfoKey, "Enabled") == 0;
 
 static bool IsSetupNagDisabled() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement", "ScoobeSystemSettingEnabled") == 0;
+	GetRegDWord(Registry.CurrentUser, UserProfileEngagementKey, "ScoobeSystemSettingEnabled") == 0;
 
 static bool IsLongPathsEnabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "LongPathsEnabled") == 1;
+	GetRegDWord(Registry.LocalMachine, FileSystemKey, "LongPathsEnabled") == 1;
 
 static bool IsRecentItemsHidden() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "ShowRecent") == 0 &&
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "ShowFrequent") == 0;
+	GetRegDWord(Registry.CurrentUser, ExplorerKey, "ShowRecent") == 0 &&
+	GetRegDWord(Registry.CurrentUser, ExplorerKey, "ShowFrequent") == 0;
 
 static bool IsPeerUpdateSharingDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode") == 0;
+	GetRegDWord(Registry.LocalMachine, DeliveryOptimizationPolicy, "DODownloadMode") == 0;
 
 static bool IsAutoRebootDisabled() =>
-	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers") == 1;
+	GetRegDWord(Registry.LocalMachine, WindowsUpdatePolicy, "NoAutoRebootWithLoggedOnUsers") == 1;
 
 static string S(bool active) => active ? "ON" : "OFF";
+
+static void RestartExplorerNote() => Console.WriteLine("Restart Explorer for the change to take effect.");
+
+static void SignOutNote() => Console.WriteLine("Sign out and back in for the change to take full effect.");
 
 static object? GetReg(RegistryKey hive, string path, string name) {
 	try {
@@ -321,45 +285,6 @@ static string? DeleteRegKey(RegistryKey hive, string path) {
 	}
 }
 
-static void ConfigureUpdates() {
-	while (true) {
-		Console.WriteLine("Windows Update Configuration.");
-		Console.WriteLine("1. Disable Updates Completely.");
-		Console.WriteLine("2. Notify Only.");
-		Console.WriteLine($"3. Disable Sharing Updates with Other PCs ({S(IsPeerUpdateSharingDisabled())}).");
-		Console.WriteLine($"4. Don't Auto-Restart While Signed In ({S(IsAutoRebootDisabled())}).");
-		Console.WriteLine("0. Back.");
-		Console.Write("Select an option: ");
-		char c = Console.ReadKey(true).KeyChar;
-		if (c == '1') {
-			Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoUpdate", 1));
-			RunGpUpdate();
-			break;
-		} else if (c == '2') {
-			Report(
-				SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoUpdate", 0),
-				SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "AUOptions", 2)
-			);
-			RunGpUpdate();
-			break;
-		} else if (c == '3') {
-			if (IsPeerUpdateSharingDisabled())
-				Report(DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode"));
-			else
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode", 0));
-			RunGpUpdate();
-			break;
-		} else if (c == '4') {
-			if (IsAutoRebootDisabled())
-				Report(DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers"));
-			else
-				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers", 1));
-			RunGpUpdate();
-			break;
-		} else if (c == '0') break;
-	}
-}
-
 static void Report(params string?[] results) {
 	var errors = Array.FindAll(results, r => r != null);
 	if (errors.Length == 0)
@@ -395,8 +320,31 @@ static void RunGpUpdate() {
 	}
 }
 
+record MenuItem(string Label, Action Run, Func<bool>? State = null);
+
+record Category(string Name, MenuItem[] Items);
+
 static partial class Program {
-	const string ContentDeliveryManagerPath = @"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";
+	const string ExplorerKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer";
+	const string ExplorerAdvancedKey = ExplorerKey + @"\Advanced";
+	const string SearchKey = @"Software\Microsoft\Windows\CurrentVersion\Search";
+	const string ContentDeliveryManagerKey = @"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";
+	const string AdvertisingInfoKey = @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo";
+	const string UserProfileEngagementKey = @"Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement";
+	const string ClassicContextMenuKey = @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}";
+	const string AllFoldersShellKey = @"Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell";
+	const string ExplorerPolicy = @"Software\Policies\Microsoft\Windows\Explorer";
+	const string MaintenanceKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance";
+	const string DriverSearchingKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching";
+	const string PowerKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Power";
+	const string FileSystemKey = @"SYSTEM\CurrentControlSet\Control\FileSystem";
+	const string WSearchServiceKey = @"SYSTEM\CurrentControlSet\Services\WSearch";
+	const string DataCollectionPolicy = @"SOFTWARE\Policies\Microsoft\Windows\DataCollection";
+	const string WindowsUpdatePolicy = @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU";
+	const string DeliveryOptimizationPolicy = @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization";
+	const string NetCostPolicy = @"SOFTWARE\Policies\Microsoft\Windows\Wireless\NetCost";
+	const string OneDrivePolicy = @"SOFTWARE\Policies\Microsoft\Windows\OneDrive";
+	const string EdgePolicy = @"SOFTWARE\Policies\Microsoft\Edge";
 
 	static readonly string[] SuggestionValues = [
 		"SilentInstalledAppsEnabled",       // Auto-installed "suggested" apps.

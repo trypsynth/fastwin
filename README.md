@@ -4,7 +4,7 @@ A lean and mean Windows optimization utility written in C# using Native AOT, all
 
 ## Features
 
-* Minimalist TUI: Simple numeric menu for quick execution.
+* Minimalist TUI: Simple numeric menus, grouped by category, for quick execution.
 * Live toggle display: Each option shows its current state (ON/OFF) and pressing its number flips it.
 * Native AOT compilation: Single standalone binary (~1.3MB) with zero dependencies.
 * Admin Required and requested: Automatically prompts for UAC to modify system registry and policies.
