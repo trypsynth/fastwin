@@ -11,4 +11,14 @@
 		<OptimizationPreference>Size</OptimizationPreference>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
+	<PropertyGroup>
+		<!-- Release builds override Version with the GitHub run number, matching the vN release tag. -->
+		<Version>0.0</Version>
+		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+		<Product>Fastwin</Product>
+		<AssemblyTitle>Fastwin Windows Optimizer</AssemblyTitle>
+		<Description>A lean and mean Windows optimization utility.</Description>
+		<Company>Quin Gillespie</Company>
+		<Copyright>Copyright (c) 2026 Quin Gillespie</Copyright>
+	</PropertyGroup>
 </Project>
