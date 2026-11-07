@@ -117,8 +117,10 @@ Category[] categories = [
 	]),
 ];
 
+// Menus are appended rather than redrawn with Console.Clear, because screen readers such as NVDA
+// can skip lines when the console is cleared and rewritten in one burst.
 while (true) {
-	Console.Clear();
+	Console.WriteLine();
 	Console.WriteLine("Fastwin - Main Menu.");
 	for (int i = 0; i < categories.Length; i++)
 		Console.WriteLine($"{i + 1}. {categories[i].Name}.");
@@ -131,7 +133,7 @@ while (true) {
 
 static void ShowCategory(Category category) {
 	while (true) {
-		Console.Clear();
+		Console.WriteLine();
 		Console.WriteLine($"Fastwin - {category.Name}.");
 		for (int i = 0; i < category.Items.Length; i++) {
 			MenuItem item = category.Items[i];
@@ -142,18 +144,19 @@ static void ShowCategory(Category category) {
 		Console.Write("\nSelect an option: ");
 		int choice = ReadChoice(category.Items.Length);
 		if (choice == 0) return;
-		Console.Clear();
 		category.Items[choice - 1].Run();
-		Console.Write("Press any key to continue...");
-		Console.ReadKey(true);
 	}
 }
 
-// Waits for a single digit key from 0 to max, ignoring anything else. Menus must stay at 9 items or fewer.
+// Waits for a single digit key from 0 to max, ignoring anything else, and echoes it so the
+// choice stays in the scrollback. Menus must stay at 9 items or fewer.
 static int ReadChoice(int max) {
 	while (true) {
 		char c = Console.ReadKey(true).KeyChar;
-		if (c >= '0' && c <= '0' + max) return c - '0';
+		if (c >= '0' && c <= '0' + max) {
+			Console.WriteLine(c);
+			return c - '0';
+		}
 	}
 }
 
