@@ -19,6 +19,10 @@ while (true) {
 	Console.WriteLine($"13. Disable Bing Search in Start Menu ({S(IsBingSearchDisabled())}).");
 	Console.WriteLine($"14. Disable ' - Shortcut' Suffix on New Shortcuts ({S(IsShortcutSuffixDisabled())}).");
 	Console.WriteLine($"15. Enable Checkbox Selection in File Explorer ({S(IsCheckboxSelectionEnabled())}).");
+	Console.WriteLine($"16. Disable OneDrive ({S(IsOneDriveDisabled())}).");
+	Console.WriteLine($"17. Disable Suggested Apps, Tips and Ads ({S(IsSuggestionsDisabled())}).");
+	Console.WriteLine($"18. Disable Search Indexer ({S(IsSearchIndexerDisabled())}).");
+	Console.WriteLine($"19. Stop Edge Running in the Background ({S(IsEdgeBackgroundDisabled())}).");
 	Console.WriteLine("0. Exit.");
 	Console.Write("\nSelect an option: ");
 	string? input = Console.ReadLine();
@@ -123,6 +127,42 @@ while (true) {
 				Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "AutoCheckSelect", 1));
 			Console.WriteLine("Restart Explorer for the change to take effect.");
 			break;
+		case "16":
+			if (IsOneDriveDisabled())
+				Report(DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\OneDrive", "DisableFileSyncNGSC"));
+			else
+				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\OneDrive", "DisableFileSyncNGSC", 1));
+			RunGpUpdate();
+			Console.WriteLine("Sign out and back in for the change to take full effect.");
+			break;
+		case "17": {
+			int value = IsSuggestionsDisabled() ? 1 : 0;
+			Report(Array.ConvertAll(SuggestionValues, name =>
+				SetReg(Registry.CurrentUser, ContentDeliveryManagerPath, name, value)));
+			break;
+		}
+		case "18":
+			if (IsSearchIndexerDisabled()) {
+				Report(SetReg(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\WSearch", "Start", 2));
+				RunHidden("sc", "start WSearch");
+			} else {
+				Report(SetReg(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\WSearch", "Start", 4));
+				RunHidden("sc", "stop WSearch");
+			}
+			break;
+		case "19":
+			if (IsEdgeBackgroundDisabled()) {
+				Report(
+					DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "StartupBoostEnabled"),
+					DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "BackgroundModeEnabled")
+				);
+			} else {
+				Report(
+					SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "StartupBoostEnabled", 0),
+					SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "BackgroundModeEnabled", 0)
+				);
+			}
+			break;
 		default:
 			Console.WriteLine("[!] Invalid selection.");
 			break;
@@ -174,6 +214,19 @@ static bool IsShortcutSuffixDisabled() {
 
 static bool IsCheckboxSelectionEnabled() =>
 	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "AutoCheckSelect") == 1;
+
+static bool IsOneDriveDisabled() =>
+	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\OneDrive", "DisableFileSyncNGSC") == 1;
+
+static bool IsSuggestionsDisabled() =>
+	Array.TrueForAll(SuggestionValues, name => GetRegDWord(Registry.CurrentUser, ContentDeliveryManagerPath, name) == 0);
+
+static bool IsSearchIndexerDisabled() =>
+	GetRegDWord(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\WSearch", "Start") == 4;
+
+static bool IsEdgeBackgroundDisabled() =>
+	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "StartupBoostEnabled") == 0 &&
+	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "BackgroundModeEnabled") == 0;
 
 static string S(bool active) => active ? "ON" : "OFF";
 
@@ -264,6 +317,14 @@ static string? SetReg(RegistryKey hive, string path, string name, object value, 
 	}
 }
 
+static void RunHidden(string file, string args) {
+	try {
+		Process.Start(new ProcessStartInfo(file, args) { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true })?.WaitForExit();
+	} catch {
+		Console.WriteLine($"Error: failed to run {file}.");
+	}
+}
+
 static void RunGpUpdate() {
 	try {
 		Process.Start(new ProcessStartInfo("gpupdate", "/force") { CreateNoWindow = true })?.WaitForExit();
@@ -271,4 +332,18 @@ static void RunGpUpdate() {
 	} catch {
 		Console.WriteLine("Error: gpupdate failed.");
 	}
+}
+
+static partial class Program {
+	const string ContentDeliveryManagerPath = @"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager";
+
+	static readonly string[] SuggestionValues = [
+		"SilentInstalledAppsEnabled",       // Auto-installed "suggested" apps.
+		"SystemPaneSuggestionsEnabled",     // Suggestions in Start.
+		"SubscribedContent-338388Enabled",  // Start menu suggestions.
+		"SubscribedContent-338389Enabled",  // Tips and tricks notifications.
+		"SubscribedContent-310093Enabled",  // Post-update welcome experience.
+		"SubscribedContent-353694Enabled",  // Suggested content in Settings.
+		"SubscribedContent-353696Enabled",  // Suggested content in Settings.
+	];
 }

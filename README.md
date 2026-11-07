@@ -14,4 +14,5 @@ A lean and mean Windows optimization utility written in C# using Native AOT, all
     * Explorer fixes: Show file extensions, hidden files, This PC, and classic right-click context menu.
     * System tweaks: Disable Fast Startup and make all Wi-Fi connections metered.
     * Disable driver retrieval from Windows Update and folder discovery.
-    * Start Menu: Disable Bing search.
+    * Start Menu: Disable Bing search, suggested apps, tips and ads.
+    * Disable OneDrive, the search indexer, and Edge running in the background.
