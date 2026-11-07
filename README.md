@@ -16,3 +16,7 @@ A lean and mean Windows optimization utility written in C# using Native AOT, all
     * Disable driver retrieval from Windows Update and folder discovery.
     * Start Menu: Disable Bing search, suggested apps, tips and ads.
     * Disable OneDrive, the search indexer, and Edge running in the background.
+    * Privacy: Disable Advertising ID and the "Finish setting up your device" prompt.
+    * Explorer: Hide recent files and frequent folders from Quick Access.
+    * Windows Update: Disable peer-to-peer update sharing and auto-restart while signed in.
+    * Enable long path support.

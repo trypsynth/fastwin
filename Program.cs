@@ -23,6 +23,10 @@ while (true) {
 	Console.WriteLine($"17. Disable Suggested Apps, Tips and Ads ({S(IsSuggestionsDisabled())}).");
 	Console.WriteLine($"18. Disable Search Indexer ({S(IsSearchIndexerDisabled())}).");
 	Console.WriteLine($"19. Stop Edge Running in the Background ({S(IsEdgeBackgroundDisabled())}).");
+	Console.WriteLine($"20. Disable Advertising ID ({S(IsAdvertisingIdDisabled())}).");
+	Console.WriteLine($"21. Disable 'Finish Setting Up Your Device' Prompt ({S(IsSetupNagDisabled())}).");
+	Console.WriteLine($"22. Enable Long Paths (over 260 characters) ({S(IsLongPathsEnabled())}).");
+	Console.WriteLine($"23. Hide Recent Files and Frequent Folders in Explorer ({S(IsRecentItemsHidden())}).");
 	Console.WriteLine("0. Exit.");
 	Console.Write("\nSelect an option: ");
 	string? input = Console.ReadLine();
@@ -104,14 +108,17 @@ while (true) {
 			if (IsBingSearchDisabled()) {
 				Report(
 					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled", 1),
-					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "CortanaConsent", 1)
+					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "CortanaConsent", 1),
+					DeleteRegValue(Registry.CurrentUser, @"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions")
 				);
 			} else {
 				Report(
 					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled", 0),
-					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "CortanaConsent", 0)
+					SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "CortanaConsent", 0),
+					SetReg(Registry.CurrentUser, @"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions", 1)
 				);
 			}
+			Console.WriteLine("Restart Explorer for the change to take effect.");
 			break;
 		case "14":
 			if (IsShortcutSuffixDisabled())
@@ -163,6 +170,24 @@ while (true) {
 				);
 			}
 			break;
+		case "20":
+			Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled", IsAdvertisingIdDisabled() ? 1 : 0));
+			break;
+		case "21":
+			Report(SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement", "ScoobeSystemSettingEnabled", IsSetupNagDisabled() ? 1 : 0));
+			break;
+		case "22":
+			Report(SetReg(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "LongPathsEnabled", IsLongPathsEnabled() ? 0 : 1));
+			break;
+		case "23": {
+			int value = IsRecentItemsHidden() ? 1 : 0;
+			Report(
+				SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "ShowRecent", value),
+				SetReg(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "ShowFrequent", value)
+			);
+			Console.WriteLine("Restart Explorer for the change to take effect.");
+			break;
+		}
 		default:
 			Console.WriteLine("[!] Invalid selection.");
 			break;
@@ -205,7 +230,8 @@ static bool IsClassicContextMenu() =>
 	RegKeyExists(Registry.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32");
 
 static bool IsBingSearchDisabled() =>
-	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled") == 0;
+	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled") == 0 &&
+	GetRegDWord(Registry.CurrentUser, @"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions") == 1;
 
 static bool IsShortcutSuffixDisabled() {
 	byte[]? link = GetRegBinary(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "link");
@@ -227,6 +253,25 @@ static bool IsSearchIndexerDisabled() =>
 static bool IsEdgeBackgroundDisabled() =>
 	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "StartupBoostEnabled") == 0 &&
 	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Edge", "BackgroundModeEnabled") == 0;
+
+static bool IsAdvertisingIdDisabled() =>
+	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled") == 0;
+
+static bool IsSetupNagDisabled() =>
+	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement", "ScoobeSystemSettingEnabled") == 0;
+
+static bool IsLongPathsEnabled() =>
+	GetRegDWord(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "LongPathsEnabled") == 1;
+
+static bool IsRecentItemsHidden() =>
+	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "ShowRecent") == 0 &&
+	GetRegDWord(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer", "ShowFrequent") == 0;
+
+static bool IsPeerUpdateSharingDisabled() =>
+	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode") == 0;
+
+static bool IsAutoRebootDisabled() =>
+	GetRegDWord(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers") == 1;
 
 static string S(bool active) => active ? "ON" : "OFF";
 
@@ -281,7 +326,9 @@ static void ConfigureUpdates() {
 		Console.WriteLine("Windows Update Configuration.");
 		Console.WriteLine("1. Disable Updates Completely.");
 		Console.WriteLine("2. Notify Only.");
-		Console.WriteLine("3. Back.");
+		Console.WriteLine($"3. Disable Sharing Updates with Other PCs ({S(IsPeerUpdateSharingDisabled())}).");
+		Console.WriteLine($"4. Don't Auto-Restart While Signed In ({S(IsAutoRebootDisabled())}).");
+		Console.WriteLine("0. Back.");
 		Console.Write("Select an option: ");
 		char c = Console.ReadKey(true).KeyChar;
 		if (c == '1') {
@@ -295,7 +342,21 @@ static void ConfigureUpdates() {
 			);
 			RunGpUpdate();
 			break;
-		} else if (c == '3') break;
+		} else if (c == '3') {
+			if (IsPeerUpdateSharingDisabled())
+				Report(DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode"));
+			else
+				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode", 0));
+			RunGpUpdate();
+			break;
+		} else if (c == '4') {
+			if (IsAutoRebootDisabled())
+				Report(DeleteRegValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers"));
+			else
+				Report(SetReg(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers", 1));
+			RunGpUpdate();
+			break;
+		} else if (c == '0') break;
 	}
 }
 
