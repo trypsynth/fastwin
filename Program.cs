@@ -124,10 +124,9 @@ while (true) {
 		Console.WriteLine($"{i + 1}. {categories[i].Name}.");
 	Console.WriteLine("0. Exit.");
 	Console.Write("\nSelect an option: ");
-	string? input = Console.ReadLine();
-	if (input == "0") break;
-	if (int.TryParse(input, out int n) && n >= 1 && n <= categories.Length)
-		ShowCategory(categories[n - 1]);
+	int choice = ReadChoice(categories.Length);
+	if (choice == 0) break;
+	ShowCategory(categories[choice - 1]);
 }
 
 static void ShowCategory(Category category) {
@@ -141,15 +140,20 @@ static void ShowCategory(Category category) {
 		}
 		Console.WriteLine("0. Back.");
 		Console.Write("\nSelect an option: ");
-		string? input = Console.ReadLine();
-		if (input == "0") return;
+		int choice = ReadChoice(category.Items.Length);
+		if (choice == 0) return;
 		Console.Clear();
-		if (int.TryParse(input, out int n) && n >= 1 && n <= category.Items.Length)
-			category.Items[n - 1].Run();
-		else
-			Console.WriteLine("[!] Invalid selection.");
-		Console.Write("Press enter to continue...");
-		Console.ReadLine();
+		category.Items[choice - 1].Run();
+		Console.Write("Press any key to continue...");
+		Console.ReadKey(true);
+	}
+}
+
+// Waits for a single digit key from 0 to max, ignoring anything else. Menus must stay at 9 items or fewer.
+static int ReadChoice(int max) {
+	while (true) {
+		char c = Console.ReadKey(true).KeyChar;
+		if (c >= '0' && c <= '0' + max) return c - '0';
 	}
 }
 
