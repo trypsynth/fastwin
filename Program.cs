@@ -148,13 +148,14 @@ static void ShowCategory(Category category) {
 	}
 }
 
-// Waits for a single digit key from 0 to max, ignoring anything else, and echoes it so the
-// choice stays in the scrollback. Menus must stay at 9 items or fewer.
+// Waits for a single digit key from 0 to max, ignoring anything else. The key isn't echoed,
+// since NVDA would re-read the whole prompt line; it already announces typed keys itself.
+// Menus must stay at 9 items or fewer.
 static int ReadChoice(int max) {
 	while (true) {
 		char c = Console.ReadKey(true).KeyChar;
 		if (c >= '0' && c <= '0' + max) {
-			Console.WriteLine(c);
+			Console.WriteLine();
 			return c - '0';
 		}
 	}
